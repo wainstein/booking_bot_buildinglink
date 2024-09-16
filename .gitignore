@@ -1,0 +1,9 @@
+*.ics
+*.pkl
+*.pyc
+*.db
+*.DS_Store
+.DS_Store
+venv/
+.vscode/
+booking_config.json
