@@ -4,7 +4,7 @@
 *.db
 *.DS_Store
 .DS_Store
-venv/
+.venv/
 .vscode/
 booking_test.py
 booking_config.json
