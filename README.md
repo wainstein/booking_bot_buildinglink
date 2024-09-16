@@ -97,7 +97,7 @@ The system uses a configuration file named `booking_config.json`. You should cre
 Once your configuration is set, run the booking system using:
 
 ```bash
-python auto_book.py
+python booking_auto.py
 ```
 
 Ensure that your system's clock is set correctly and that you have an uninterrupted internet connection during the booking process.
