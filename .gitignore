@@ -6,4 +6,5 @@
 .DS_Store
 venv/
 .vscode/
+booking_test.py
 booking_config.json
