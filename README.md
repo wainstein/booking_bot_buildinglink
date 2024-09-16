@@ -115,7 +115,7 @@ This setup guide should help you configure and run the automated booking system 
 
 This project is available under a non-commercial open-source license. This allows individuals and organizations to use, modify, and distribute the software for non-commercial purposes only. Any usage of the software for commercial purposes without permission is strictly prohibited.
 
-```
+```text
 Copyright (c) 2024 JUNJUN WAN
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
