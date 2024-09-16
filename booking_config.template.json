@@ -1,0 +1,26 @@
+{
+    "users": [
+      {"username": "your_username", "password": "your_password"},
+      {"username": "your_username_1", "password": "your_password_1"}
+    ],
+    "target_date_offset_days": 4,
+    "booking_start_offset_days": 3,
+    "primary_amenity_name": "your_amenity_name_1",
+    "alternate_amenity_name": "your_amenity_name_1",
+    "amenities": {
+        "your_amenity_name_1": "your_amenity_id_1",
+        "your_amenity_name_2": "your_amenity_id_2"
+    },
+    "alternative_amenity_id": "your_amenity_id_2",
+    "times": ["18:00", "19:00", "20:00"],
+    "refresh_interval_seconds": 60,
+    "check_interval_seconds": 0.5,
+    "target_days": [0, 1, 2, 3, 4, 5, 6],
+    "smtp_server": "smtp.sendgrid.com",
+    "smtp_port": 587,
+    "sender_email": "your_sender_email",
+    "sender_username": "your_sender_username",
+    "sender_password": "your_sender_password",
+    "recipient_emails": ["your_email_recipient_1@yours.domain", "your_email_recipient_2@yours.domain"]
+  }
+  
