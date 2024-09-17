@@ -148,7 +148,7 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
         time_to_booking = (target_time - now).total_seconds() / 60  # Time to booking in minutes
         
         if time_to_booking <= 5:
-            print(f"[{username}] Booking time is less than 5 minutes away. Starting...")
+            print(f"[{username}] Booking time is less than 5 minutes away. Getting ready...")
             break  # Within 5 minutes or already past target time
         
         # Wait and check again
@@ -156,18 +156,22 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
         
     try:
         driver = setup_driver()
+        print(f"[{username}] Browser ready.")
 
         # Login URL with dynamic date (current date + prio days)
         login_date = (datetime.date.today() + datetime.timedelta(days=prio_days)).strftime("%Y-%m-%d")
         login(driver, username, password, login_date)
+        print(f"[{username}] Logged in.")
 
         # Immediately navigate to the target booking page after login
         navigate_to_booking_page(driver, amenity_id, target_date)
+        print(f"[{username}] Navigate to reserve page and stand by.")
         
         # Real-time check for booking time while keeping the session alive
         while True:
             now = datetime.datetime.now()
             if now >= target_time:
+                print(f"[{username}] Begin.")
                 break
 
             # Check for any validation errors immediately
