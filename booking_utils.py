@@ -120,10 +120,9 @@ def run_booking_process(username, password, target_date, start_time, amenity_id,
         # Wait and check again
         print(f"[{username}] Booking time is more than 5 minutes away. Waiting...")
         time.sleep(10)  # Check every 10 seconds
-
-    driver = setup_driver()
+        
     try:
-        driver = webdriver.Chrome()
+        driver = setup_driver()
 
         # Login URL with dynamic date (current date + 3 days)
         login_date = (datetime.date.today() + datetime.timedelta(days=3)).strftime("%Y-%m-%d")
