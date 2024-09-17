@@ -110,7 +110,12 @@ def book_time_slot(driver, start_time):
     
     if not matched:
         raise ValueError(f"Could not find a matching time option for '{start_time_24}'.")
-
+    
+    # Check for any validation errors immediately
+    has_error, error_message = check_for_errors_and_exit(driver)
+    if has_error:
+        raise ValueError(f"Booking error detected: {error_message}")
+    
     # Submit booking
     submit_button = WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.ID, 'ctl00_ContentPlaceHolder1_HeaderSaveButton'))
@@ -158,12 +163,6 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
 
         # Immediately navigate to the target booking page after login
         navigate_to_booking_page(driver, amenity_id, target_date)
-     
-        # Check for any validation errors immediately
-        has_error, error_message = check_for_errors_and_exit(driver)
-        if has_error:
-            result["message"] = f"Booking error detected: {error_message}"
-            return result
         
         # Real-time check for booking time while keeping the session alive
         while True:
@@ -183,6 +182,7 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
             # High-frequency check for target time
             time.sleep(check_interval)
             
+        driver.refresh()
         
         # Retry logic for unavailable amenity
         max_retries = 3
@@ -202,6 +202,13 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
             
         if retries == 3:
             result["message"] = f"Booking date error. Exiting"
+            return result
+        
+             
+        # Check for any validation errors immediately
+        has_error, error_message = check_for_errors_and_exit(driver)
+        if has_error:
+            result["message"] = f"Booking error detected: {error_message}"
             return result
 
         # Booking time reached, proceed with booking
