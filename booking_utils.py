@@ -6,6 +6,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
 def convert_to_24_hour_format(time_str):
     """Convert a time string to 24-hour format."""
@@ -97,7 +98,7 @@ def setup_driver():
         chrome_options.add_argument("--disable-gpu")  # Disables GPU hardware acceleration
         chrome_options.add_argument("--remote-debugging-port=9222")  # Specifies port number for remote debugging
 
-    driver = webdriver.Chrome(options=chrome_options)
+    driver = webdriver.Chrome(ChromeDriverManager().install()), options=chrome_options)
     return driver
 
 def run_booking_process(username, password, target_date, start_time, amenity_id, amenity_name, refresh_interval, check_interval):
