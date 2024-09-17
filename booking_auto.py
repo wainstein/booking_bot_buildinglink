@@ -38,6 +38,7 @@ def run_all_bookings(config):
     refresh_interval = config["refresh_interval_seconds"]
     check_interval = config["check_interval_seconds"]
     target_days = config["target_days"]
+    prio_days = config["booking_start_offset_days"]
 
     # Map amenity names to IDs
     amenity_ids = config["amenities"]
@@ -66,7 +67,7 @@ def run_all_bookings(config):
         password = user['password']
         for start_time in times:
             t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                                 args=(first_round_results, username, password, target_date_str, start_time, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
+                                 args=(first_round_results, username, password, target_date_str, start_time, prio_days, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
             threads.append(t)
             t.start()
             time.sleep(0.1)  # Wait 100ms between each booking thread to avoid clashes
@@ -99,7 +100,7 @@ def run_all_bookings(config):
                 username = user['username']
                 password = user['password']
                 t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                                     args=(second_round_results, username, password, target_date_str, time_slot, alternate_amenity_id, alternate_amenity_name, refresh_interval, check_interval))
+                                     args=(second_round_results, username, password, target_date_str, time_slot, prio_days, alternate_amenity_id, alternate_amenity_name, refresh_interval, check_interval))
                 threads.append(t)
                 t.start()
                 time.sleep(0.1)

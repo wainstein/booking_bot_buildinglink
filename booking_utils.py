@@ -45,17 +45,45 @@ def keep_session_alive(driver, refresh_interval):
         driver.refresh()
         print("Refreshed page to keep session alive.")
 
-def check_for_validation_error(driver):
-    """Check if there is any text inside the ValidationContainer indicating an error."""
+def check_for_errors_and_exit(driver):
+    """Check the ValidationContainer for errors and exit if found."""
     try:
         validation_container = driver.find_element(By.ID, "ValidationContainer")
-        validation_text = validation_container.text.strip()
-        if validation_text:
-            print(f"Detected validation error: {validation_text}")
-            return True, validation_text
-        return False, ""
+        if validation_container.text.strip():  # If ValidationContainer has any text
+            # Check specific labels for detailed error messages
+            errors = []
+            try:
+                error_label_1 = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_ValidationSummary1")
+                if error_label_1.text.strip():
+                    errors.append(error_label_1.text.strip())
+            except:
+                pass
+
+            try:
+                error_label_2 = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_ctl00_ContentPlaceHolder1_pnlAllocationErrorPanel")
+                if error_label_2.text.strip():
+                    errors.append(error_label_2.text.strip())
+            except:
+                pass
+
+            error_message = " | ".join(errors) if errors else "Unknown error in ValidationContainer."
+            print(f"Detected error: {error_message}")
+            return True, error_message
     except:
-        return False, ""
+        pass
+    return False, ""
+
+def check_amenity_unavailable(driver):
+    """Check if the amenity is unavailable on the selected date."""
+    try:
+        # Look for the specific element indicating unavailability
+        error_element = driver.find_element(By.CSS_SELECTOR, "div.Div.PT")
+        if "This Amenity is currently unavailable on the selected date." in error_element.text:
+            print("Amenity is currently unavailable on the selected date.")
+            return True
+        return False
+    except:
+        return False
 
 def book_time_slot(driver, start_time):
     """Book a specific time slot."""
@@ -88,7 +116,7 @@ def book_time_slot(driver, start_time):
         EC.element_to_be_clickable((By.ID, 'ctl00_ContentPlaceHolder1_HeaderSaveButton'))
     )
     submit_button.click()
-    
+
 def setup_driver():
     """Set up the WebDriver with appropriate options based on the OS."""
     chrome_options = Options()
@@ -100,13 +128,13 @@ def setup_driver():
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     return driver
 
-def run_booking_process(username, password, target_date, start_time, amenity_id, amenity_name, refresh_interval, check_interval):
+def run_booking_process(username, password, target_date, start_time, prio_days, amenity_id, amenity_name, refresh_interval, check_interval):
     """Run the booking process for a specific user, date, and time."""
     result = {"username": username, "time": start_time, "amenity_id": amenity_id, "amenity_name": amenity_name, "status": "Failed", "message": ""}
 
-    # Calculate target time based on target_date minus 3 days at midnight
+    # Calculate target time based on target_date minus prio days at midnight
     target_datetime = datetime.datetime.strptime(target_date, "%Y-%m-%d")
-    target_time = datetime.datetime.combine(target_datetime - datetime.timedelta(days=3), datetime.time(0, 0))
+    target_time = datetime.datetime.combine(target_datetime - datetime.timedelta(days=prio_days), datetime.time(0, 0))
     print(f"[{username}] Waiting for booking time: {target_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Check if the current time is within 5 minutes of the target time or has already passed
@@ -115,43 +143,70 @@ def run_booking_process(username, password, target_date, start_time, amenity_id,
         time_to_booking = (target_time - now).total_seconds() / 60  # Time to booking in minutes
         
         if time_to_booking <= 5:
+            print(f"[{username}] Booking time is less than 5 minutes away. Starting...")
             break  # Within 5 minutes or already past target time
         
         # Wait and check again
-        print(f"[{username}] Booking time is more than 5 minutes away. Waiting...")
         time.sleep(10)  # Check every 10 seconds
         
     try:
         driver = setup_driver()
 
-        # Login URL with dynamic date (current date + 3 days)
-        login_date = (datetime.date.today() + datetime.timedelta(days=3)).strftime("%Y-%m-%d")
+        # Login URL with dynamic date (current date + prio days)
+        login_date = (datetime.date.today() + datetime.timedelta(days=prio_days)).strftime("%Y-%m-%d")
         login(driver, username, password, login_date)
 
         # Immediately navigate to the target booking page after login
         navigate_to_booking_page(driver, amenity_id, target_date)
-
+     
+        # Check for any validation errors immediately
+        has_error, error_message = check_for_errors_and_exit(driver)
+        if has_error:
+            result["message"] = f"Booking error detected: {error_message}"
+            return result
+        
         # Real-time check for booking time while keeping the session alive
         while True:
             now = datetime.datetime.now()
             if now >= target_time:
                 break
 
+            # Check for any validation errors immediately
+            has_error, error_message = check_for_errors_and_exit(driver)
+            if has_error:
+                result["message"] = f"Booking error detected: {error_message}"
+                return result
+
             # Keep session alive
             keep_session_alive(driver, refresh_interval)
 
             # High-frequency check for target time
             time.sleep(check_interval)
+            
+        
+        # Retry logic for unavailable amenity
+        max_retries = 3
+        retries = 0
+        while retries < max_retries:
+            if check_amenity_unavailable(driver):
+                retries += 1
+                print(f"Attempt {retries}: Amenity unavailable, refreshing page...")
+                if retries >= max_retries:
+                    print("Max retries reached. Exiting with error.")
+                    result["message"] = "Amenity unavailable on the selected date after 3 attempts."
+                    return result
+                driver.refresh()
+                time.sleep(5)  # Wait a bit before trying again
+            else:
+                break
+            
+        if retries == 3:
+            result["message"] = f"Booking date error. Exiting"
+            return result
 
         # Booking time reached, proceed with booking
         print(f"[{username}] Attempting to book at {start_time}.")
         book_time_slot(driver, start_time)
-
-        # Check for validation errors immediately after clicking submit
-        has_error, error_message = check_for_validation_error(driver)
-        if has_error:
-            result["message"] = f"Booking error detected: {error_message}"
-            return result  # Exit if an error is detected
 
         # Wait for the success element indicating a redirect to the Calendar View page
         try:
