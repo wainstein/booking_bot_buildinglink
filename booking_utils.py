@@ -1,6 +1,8 @@
+import sys
 import time
 import datetime
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -84,6 +86,18 @@ def book_time_slot(driver, start_time):
         EC.element_to_be_clickable((By.ID, 'ctl00_ContentPlaceHolder1_HeaderSaveButton'))
     )
     submit_button.click()
+    
+def setup_driver():
+    """Set up the WebDriver with appropriate options based on the OS."""
+    chrome_options = Options()
+    # Detect if the OS is Linux or Darwin (macOS), and run headless if it is
+    if sys.platform in ["linux", "darwin"]:
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
 
 def run_booking_process(username, password, target_date, start_time, amenity_id, amenity_name, refresh_interval, check_interval):
     """Run the booking process for a specific user, date, and time."""
@@ -106,7 +120,7 @@ def run_booking_process(username, password, target_date, start_time, amenity_id,
         print(f"[{username}] Booking time is more than 5 minutes away. Waiting...")
         time.sleep(10)  # Check every 10 seconds
 
-    driver = None
+    driver = setup_driver()
     try:
         driver = webdriver.Chrome()
 
