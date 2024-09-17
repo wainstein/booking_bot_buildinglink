@@ -90,12 +90,13 @@ def book_time_slot(driver, start_time):
 def setup_driver():
     """Set up the WebDriver with appropriate options based on the OS."""
     chrome_options = Options()
-    # Detect if the OS is Linux or Darwin (macOS), and run headless if it is
-    if sys.platform in ["linux", "darwin"]:
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-    
+    if sys.platform in ["linux", "darwin"]:  # Checks if the OS is Linux or macOS
+        chrome_options.add_argument("--headless")  # Runs Chrome in headless mode
+        chrome_options.add_argument("--no-sandbox")  # Bypasses OS security model
+        chrome_options.add_argument("--disable-dev-shm-usage")  # Overcomes limited resource problems
+        chrome_options.add_argument("--disable-gpu")  # Disables GPU hardware acceleration
+        chrome_options.add_argument("--remote-debugging-port=9222")  # Specifies port number for remote debugging
+
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
