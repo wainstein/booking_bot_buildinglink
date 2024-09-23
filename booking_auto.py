@@ -57,181 +57,77 @@ def run_all_bookings(config):
     # Data structure to hold booking results per time slot
     summary_results = {time_slot: {} for time_slot in times}
 
-    # Step 1: Each account attempts to book a unique time slot
-    print("\nStep 1: Book a different time slot for each account.")
-    first_step_results = []
+    # First Round Booking: Attempt to book primary amenity
+    print("\nStarting first round booking for primary amenity.")
     threads = []
+    first_round_results = []
 
-    # Assign each user a unique time slot
-    for i, user in enumerate(user_list):
-        username = user['username']
-        password = user['password']
-        start_time = times[i % len(times)]  # Assign a time slot to each user
-        t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                             args=(first_step_results, username, password, target_date_str, start_time, prio_days, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
-        threads.append(t)
-        t.start()
-        time.sleep(0.1)  # Wait 100ms between each booking thread to avoid clashes
-
-    # Wait for all threads in the first step to complete
-    for t in threads:
-        t.join()
-
-    # Process first step results
-    successful_times = []
-    for result in first_step_results:
-        time_slot = result['time']
-        if result['status'] == 'Success':
-            summary_results[time_slot] = {
-                'status': 'Success',
-                'username': result['username'],
-                'amenity_name': primary_amenity_name
-            }
-            successful_times.append(time_slot)
-        else:
-            summary_results[time_slot] = {
-                'status': 'Failed',
-                'username': result['username'],
-                'amenity_name': primary_amenity_name,
-                'message': result['message']
-            }
-
-    # Step 2: Remaining combinations
-    print("\nStep 2: Use the remaining 6 combinations to book the remaining time slots.")
-    second_step_results = []
-    threads = []
-
-    # Build the remaining combinations for step 2
-    remaining_combinations = []
     for user in user_list:
         username = user['username']
         password = user['password']
         for start_time in times:
-            # Skip combinations attempted in the first step
-            if not any(res['username'] == username and res['time'] == start_time for res in first_step_results):
-                # Skip time slots that have been successfully booked
-                if start_time not in successful_times:
-                    remaining_combinations.append((username, password, start_time))
+            t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
+                                 args=(first_round_results, username, password, target_date_str, start_time, prio_days, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
+            threads.append(t)
+            t.start()
+            time.sleep(0.1)  # Wait 100ms between each booking thread to avoid clashes
 
-    # Start threads for remaining combinations
-    for combo in remaining_combinations:
-        username, password, start_time = combo
-        t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                             args=(second_step_results, username, password, target_date_str, start_time, prio_days, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
-        threads.append(t)
-        t.start()
-        time.sleep(0.1)
-
-    # Wait for all threads in the second step to complete
+    # Wait for all threads to complete
     for t in threads:
         t.join()
 
-    # Process second step results
-    for result in second_step_results:
+    # Process first round results
+    for result in first_round_results:
         time_slot = result['time']
-        if result['status'] == 'Success' and summary_results[time_slot]['status'] != 'Success':
+        if result['status'] == 'Success' and time_slot in summary_results:
             summary_results[time_slot] = {
                 'status': 'Success',
                 'username': result['username'],
                 'amenity_name': primary_amenity_name
             }
-            successful_times.append(time_slot)
-        elif summary_results[time_slot]['status'] != 'Success':
+
+    # # Determine which time slots failed
+    # failed_time_slots = [time_slot for time_slot, res in summary_results.items() if res == {}]
+
+    # # Second Round Booking: Attempt to book alternate amenity for failed time slots
+    # if failed_time_slots:
+    #     print("\nStarting second round booking for alternate amenity.")
+    #     threads = []
+    #     second_round_results = []
+
+    #     for time_slot in failed_time_slots:
+    #         for user in user_list:
+    #             username = user['username']
+    #             password = user['password']
+    #             t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
+    #                                  args=(second_round_results, username, password, target_date_str, time_slot, prio_days, alternate_amenity_id, alternate_amenity_name, refresh_interval, check_interval))
+    #             threads.append(t)
+    #             t.start()
+    #             time.sleep(0.1)
+
+    #     # Wait for all threads to complete
+    #     for t in threads:
+    #         t.join()
+
+    #     # Process second round results
+    #     for result in second_round_results:
+    #         time_slot = result['time']
+    #         if result['status'] == 'Success' and time_slot in summary_results and summary_results[time_slot] == {}:
+    #             summary_results[time_slot] = {
+    #                 'status': 'Success',
+    #                 'username': result['username'],
+    #                 'amenity_name': alternate_amenity_name
+    #             }
+
+    # Update summary results for failed time slots
+    for time_slot, res in summary_results.items():
+        if res == {}:
             summary_results[time_slot] = {
                 'status': 'Failed',
-                'username': result['username'],
-                'amenity_name': primary_amenity_name,
-                'message': result['message']
-            }
-
-    # Step 3: Remaining combinations
-    print("\nStep 3: Use the remaining 3 combinations to book the remaining time slots.")
-    third_step_results = []
-    threads = []
-
-    # Build the remaining combinations for step 3
-    remaining_combinations_step3 = []
-    for user in user_list:
-        username = user['username']
-        password = user['password']
-        for start_time in times:
-            # Skip combinations attempted in previous steps
-            if not any(res['username'] == username and res['time'] == start_time for res in first_step_results + second_step_results):
-                # Skip time slots that have been successfully booked
-                if start_time not in successful_times:
-                    remaining_combinations_step3.append((username, password, start_time))
-
-    # Start threads for remaining combinations
-    for combo in remaining_combinations_step3:
-        username, password, start_time = combo
-        t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                             args=(third_step_results, username, password, target_date_str, start_time, prio_days, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
-        threads.append(t)
-        t.start()
-        time.sleep(0.1)
-
-    # Wait for all threads in the third step to complete
-    for t in threads:
-        t.join()
-
-    # Process third step results
-    for result in third_step_results:
-        time_slot = result['time']
-        if result['status'] == 'Success' and summary_results[time_slot]['status'] != 'Success':
-            summary_results[time_slot] = {
-                'status': 'Success',
-                'username': result['username'],
+                'username': 'N/A',
                 'amenity_name': primary_amenity_name
             }
-            successful_times.append(time_slot)
-        elif summary_results[time_slot]['status'] != 'Success':
-            summary_results[time_slot] = {
-                'status': 'Failed',
-                'username': result['username'],
-                'amenity_name': primary_amenity_name,
-                'message': result['message']
-            }
 
-    # 如果还有未成功的时段，尝试预订备用设施
-    failed_time_slots = [time_slot for time_slot, res in summary_results.items() if res['status'] != 'Success']
-
-    if failed_time_slots:
-        print("\n尝试预订备用设施。")
-        alternate_results = []
-        threads = []
-
-        for time_slot in failed_time_slots:
-            for user in user_list:
-                username = user['username']
-                password = user['password']
-                t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                                     args=(alternate_results, username, password, target_date_str, time_slot, prio_days, alternate_amenity_id, alternate_amenity_name, refresh_interval, check_interval))
-                threads.append(t)
-                t.start()
-                time.sleep(0.1)
-
-        # Wait for all threads in the alternate step to complete
-        for t in threads:
-            t.join()
-
-        # Process alternate amenity results
-        for result in alternate_results:
-            time_slot = result['time']
-            if result['status'] == 'Success' and summary_results[time_slot]['status'] != 'Success':
-                summary_results[time_slot] = {
-                    'status': 'Success',
-                    'username': result['username'],
-                    'amenity_name': alternate_amenity_name
-                }
-            elif summary_results[time_slot]['status'] != 'Success':
-                summary_results[time_slot] = {
-                    'status': 'Failed',
-                    'username': result['username'],
-                    'amenity_name': alternate_amenity_name,
-                    'message': result['message']
-                }
-
-    # 最终生成报告并发送邮件
     # Generate HTML content for the email
     html_content = generate_html_email(summary_results)
 
