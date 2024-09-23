@@ -8,6 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 
 def convert_to_24_hour_format(time_str):
@@ -140,7 +141,6 @@ def book_time_slot(driver, start_time, username):
         for option in time_options:
             option_text_raw = option.text.strip()
             option_text = convert_to_24_hour_format(option_text_raw)  # Convert each option to 24-hour format
-            print(f"Raw option: {option_text_raw} - Converted: {option_text} - Target: {start_time_24}")
             if option_text == start_time_24:
                 option.click()
                 matched = True
@@ -169,9 +169,15 @@ def book_time_slot(driver, start_time, username):
         )
         submit_button.click()
         print(f"[{username}] Clicked submit button to finalize booking.")
+        
+        time.sleep(2)
+        # After submitting, immediately check for errors
+        has_error, error_message = check_for_errors_and_exit(driver, username)
+        if has_error:
+            raise ValueError(f"[{username}] Booking error detected: {error_message}")
 
     except Exception as e:
-        print(f"[{username}] Exception during booking time slot: {e}")
+        #print(f"[{username}] Exception during booking time slot: {e}")
         raise
 
 def set_end_time(driver, start_time, username):
@@ -202,7 +208,7 @@ def set_end_time(driver, start_time, username):
         wait_for_end_time_options_to_load(driver)
         for option in time_options:
             option_text = convert_to_24_hour_format(option.text.strip())  # Convert each option to 24-hour format
-            print(f"{option_text}-{end_time_24}")
+            #print(f"Raw option: {option_text_raw} - Converted: {option_text} - Target: {end_time_24}")
             if option_text == end_time_24:
                 option.click()
                 matched = True
@@ -215,11 +221,31 @@ def set_end_time(driver, start_time, username):
     except Exception as e:
         print(f"[{username}] Exception during setting end time: {e}")
         raise
+    
+def verify_page_url(driver, target_date, username, amenity_id):
+    """Verify if the current URL matches the expected target date URL, ignoring case."""
+    expected_url = f"https://www.buildinglink.com/V2/Tenant/Amenities/NewReservation.aspx?amenityId={amenity_id}&from=0&selectedDate={target_date}".lower()
+    max_attempts = 10
+    attempts = 0
+
+    while attempts < max_attempts:
+        current_url = driver.current_url.lower()  # Convert current URL to lowercase for case-insensitive comparison
+        if current_url == expected_url:
+            print(f"[{username}] URL verification successful. Current URL matches target (ignoring case): {current_url}")
+            return True
+        else:
+            print(f"[{username}] URL mismatch (ignoring case). Current URL: {current_url}, expected: {expected_url}. Reloading...")
+            driver.get(expected_url)
+            time.sleep(.1)  # Wait for the page to load before checking again
+            attempts += 1
+
+    print(f"[{username}] URL verification failed after {max_attempts} attempts.")
+    return False
 
 def setup_driver():
     """Set up the WebDriver with appropriate options based on the OS."""
     chrome_options = Options()
-    if sys.platform in ["linux"]:
+    if sys.platform in ["linux","darwin"]:
         chrome_options.add_argument('--headless')
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
@@ -284,52 +310,26 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
         driver.refresh()
         print(f"[{username}] Page refreshed at booking time.")
 
-        # Retry logic for unavailable amenity
-        max_retries = 3
-        retries = 0
-        while retries < max_retries:
-            if check_amenity_unavailable(driver, username):
-                retries += 1
-                print(f"[{username}] Attempt {retries}: Amenity unavailable, refreshing page...")
-                if retries >= max_retries:
-                    print(f"[{username}] Max retries reached. Exiting with error.")
-                    result["message"] = "Amenity unavailable on the selected date after 3 attempts."
-                    return result
-                driver.refresh()
-                time.sleep(5)  # Wait a bit before trying again
-            else:
-                print(f"[{username}] Amenity is available. Proceeding.")
-                break
-
-        if retries == max_retries:
-            result["message"] = f"Booking date error. Exiting"
-            print(f"[{username}] {result['message']}")
-            return result
-
-        # Check for any validation errors immediately
-        has_error, error_message = check_for_errors_and_exit(driver, username)
-        if has_error:
-            result["message"] = f"Booking error detected: {error_message}"
+        # Ensure the page is loaded with the correct target date
+        if not verify_page_url(driver, target_date, username, amenity_id):
+            result["message"] = "Failed to load the correct target date page after multiple attempts."
             print(f"[{username}] {result['message']}")
             return result
 
         # Booking time reached, proceed with booking
         print(f"[{username}] Attempting to book at {start_time}.")
         book_time_slot(driver, start_time, username)
-
-        # Wait for the success element indicating a redirect to the Calendar View page
+        
         try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.ID, 'ThePageHeaderWrap'))
-            )
-            # If the element is found, it means booking was successful
+            driver.find_element(By.ID, "ThePageHeaderWrap")
+            # If no errors, report success
             result["status"] = "Success"
             result["message"] = "Reservation has been made successfully!"
             print(f"[{username}] Booking successful.")
-        except Exception as e:
+        except NoSuchElementException:
             # If the element is not found, check for a warning
             result["message"] = "Booking was not successful."
-            print(f"[{username}] Booking failed: {e}")
+            print(f"[{username}] Booking failed.")
 
     except Exception as e:
         result["message"] = f"An error occurred: {str(e)}"
@@ -339,3 +339,4 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
             driver.quit()
             print(f"[{username}] Browser closed.")
     return result
+
