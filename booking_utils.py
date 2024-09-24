@@ -87,7 +87,7 @@ def check_for_errors_and_exit(driver, username):
             print(f"[{username}] Detected error: {error_message}")
             return True, error_message
     except Exception as e:
-        print(f"[{username}] Exception during error checking: {e}")
+        print(f"[{username}] Can't find Error section")
     return False, ""
 
 def check_amenity_unavailable(driver, username):
