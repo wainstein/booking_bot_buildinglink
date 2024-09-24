@@ -125,7 +125,7 @@ def run_all_bookings(config):
             summary_results[time_slot] = {
                 'status': 'Failed',
                 'username': 'N/A',
-                'amenity_name': primary_amenity_name
+                'amenity_name': 'N/A'
             }
 
     # Generate HTML content for the email
