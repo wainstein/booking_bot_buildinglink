@@ -272,7 +272,7 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
             break  # Within 5 minutes or already past target time
 
         # Wait and check again
-        time.sleep(10)  # Check every 10 seconds
+        time.sleep(.5)  # Check every 10 seconds
 
     try:
         driver = setup_driver()
@@ -333,7 +333,7 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
 
     except Exception as e:
         result["message"] = f"An error occurred: {str(e)}"
-        print(f"[{username}] Exception in booking process: {traceback.format_exc()}")
+        #print(f"[{username}] Exception in booking process: {traceback.format_exc()}")
     finally:
         if driver:
             driver.quit()
