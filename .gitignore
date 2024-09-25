@@ -2,6 +2,7 @@
 *.pkl
 *.pyc
 *.db
+*.log
 *.DS_Store
 .DS_Store
 .venv/

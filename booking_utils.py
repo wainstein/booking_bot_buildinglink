@@ -1,4 +1,5 @@
 import sys
+import threading
 import time
 import datetime
 import traceback
@@ -10,6 +11,30 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
+import logging
+import os
+
+def setup_logger(username, time_slot):
+    """Set up a logger for each booking process and time slot."""
+    thread_id = threading.get_ident()  # Get unique thread ID
+    log_filename = f"{username}_{time_slot}_{thread_id}.log"
+    
+    logger = logging.getLogger(log_filename)  # Use filename as logger name to avoid conflicts
+    logger.setLevel(logging.DEBUG)
+
+    # Create a file handler for logging
+    file_handler = logging.FileHandler(log_filename)
+    file_handler.setLevel(logging.DEBUG)
+
+    # Create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # Add the handlers to the logger
+    if not logger.hasHandlers():  # Avoid adding multiple handlers in case of re-entry
+        logger.addHandler(file_handler)
+
+    return logger
 
 def convert_to_24_hour_format(time_str):
     """Convert a time string to 24-hour format."""
@@ -254,89 +279,85 @@ def setup_driver():
     return driver
 
 def run_booking_process(username, password, target_date, start_time, prio_days, amenity_id, amenity_name, refresh_interval, check_interval):
-    """Run the booking process for a specific user, date, and time."""
+    """Run the booking process for a specific user, date, and time slot."""
+    logger = setup_logger(username, start_time)  # Set up logger for each thread (user and time slot)
+    logger.info(f"Starting booking process for {username} at time slot {start_time}")
+
     result = {"username": username, "time": start_time, "amenity_id": amenity_id, "amenity_name": amenity_name, "status": "Failed", "message": ""}
 
     # Calculate target time based on target_date minus prio days at midnight
     target_datetime = datetime.datetime.strptime(target_date, "%Y-%m-%d")
     target_time = datetime.datetime.combine(target_datetime - datetime.timedelta(days=prio_days), datetime.time(0, 0))
-    print(f"[{username}] Waiting for booking time: {target_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Waiting for booking time: {target_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Check if the current time is within 5 minutes of the target time or has already passed
     while True:
         now = datetime.datetime.now()
         time_to_booking = (target_time - now).total_seconds() / 60  # Time to booking in minutes
 
         if time_to_booking <= 5:
-            print(f"[{username}] Booking time is less than 5 minutes away. Getting ready...")
+            logger.info("Booking time is less than 5 minutes away. Getting ready...")
             break  # Within 5 minutes or already past target time
 
-        # Wait and check again
-        time.sleep(.5)  # Check every 10 seconds
+        time.sleep(0.5)  # Check every 0.5 seconds
 
     try:
         driver = setup_driver()
-        print(f"[{username}] Browser ready.")
+        logger.info("Browser ready.")
 
-        # Login URL with dynamic date (current date + prio days)
+        # Login
         login_date = (datetime.date.today() + datetime.timedelta(days=prio_days)).strftime("%Y-%m-%d")
         login(driver, username, password, login_date)
-        print(f"[{username}] Logged in.")
+        logger.info("Logged in.")
 
-        # Immediately navigate to the target booking page after login
+        # Navigate to booking page
         navigate_to_booking_page(driver, amenity_id, target_date, username)
-        print(f"[{username}] Navigated to reserve page and standing by.")
+        logger.info(f"Navigated to reserve page for amenity {amenity_name}.")
 
-        # Real-time check for booking time while keeping the session alive
         while True:
             now = datetime.datetime.now()
             if now >= target_time:
-                print(f"[{username}] Booking time reached. Proceeding to book.")
+                logger.info("Booking time reached. Proceeding to book.")
                 break
 
             # Check for any validation errors immediately
             has_error, error_message = check_for_errors_and_exit(driver, username)
             if has_error:
                 result["message"] = f"Booking error detected: {error_message}"
-                print(f"[{username}] {result['message']}")
+                logger.error(f"Booking error detected: {error_message}")
                 return result
 
             # Keep session alive
             keep_session_alive(driver, refresh_interval, username)
-
-            # High-frequency check for target time
             time.sleep(check_interval)
 
         driver.refresh()
-        print(f"[{username}] Page refreshed at booking time.")
+        logger.info("Page refreshed at booking time.")
 
         # Ensure the page is loaded with the correct target date
         if not verify_page_url(driver, target_date, username, amenity_id):
             result["message"] = "Failed to load the correct target date page after multiple attempts."
-            print(f"[{username}] {result['message']}")
+            logger.error(result["message"])
             return result
 
-        # Booking time reached, proceed with booking
-        print(f"[{username}] Attempting to book at {start_time}.")
+        # Booking process
+        logger.info(f"Attempting to book at {start_time}.")
         book_time_slot(driver, start_time, username)
-        
+
         try:
             driver.find_element(By.ID, "ThePageHeaderWrap")
-            # If no errors, report success
             result["status"] = "Success"
             result["message"] = "Reservation has been made successfully!"
-            print(f"[{username}] Booking successful.")
+            logger.info("Booking successful.")
         except NoSuchElementException:
-            # If the element is not found, check for a warning
             result["message"] = "Booking was not successful."
-            print(f"[{username}] Booking failed.")
+            logger.error("Booking failed.")
 
     except Exception as e:
         result["message"] = f"An error occurred: {str(e)}"
-        #print(f"[{username}] Exception in booking process: {traceback.format_exc()}")
+        logger.error(f"Exception in booking process: {traceback.format_exc()}")
+
     finally:
         if driver:
             driver.quit()
-            print(f"[{username}] Browser closed.")
+            logger.info("Browser closed.")
     return result
-
