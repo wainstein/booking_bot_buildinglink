@@ -298,7 +298,7 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
             logger.info("Booking time is less than 5 minutes away. Getting ready...")
             break  # Within 5 minutes or already past target time
 
-        time.sleep(0.5)  # Check every 0.5 seconds
+        time.sleep(check_interval)  # Check every 0.5 seconds
 
     try:
         driver = setup_driver()
@@ -309,34 +309,37 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
         login(driver, username, password, login_date)
         logger.info("Logged in.")
 
+
+        # Calculate time to wait before the final refresh
+        now = datetime.datetime.now()
+        time_to_booking = (target_time - now).total_seconds()
+        time_to_wait = max(check_interval, time_to_booking - refresh_interval)
+        logger.info(f"Refresh before {time_to_wait:.2f} seconds ahead of final booking time.")
+        # Perform final refresh just before booking time
+        driver.refresh()
+        time.sleep(time_to_wait) # Short sleep to avoid server time difference
+        
         # Navigate to booking page
         navigate_to_booking_page(driver, amenity_id, target_date, username)
         logger.info(f"Navigated to reserve page for amenity {amenity_name}.")
+        
+        time.sleep(time_to_wait)
 
-        while True:
-            now = datetime.datetime.now()
-            if now >= target_time:
-                logger.info("Booking time reached. Proceeding to book.")
-                break
-
-            # Check for any validation errors immediately
-            has_error, error_message = check_for_errors_and_exit(driver, username)
-            if has_error:
-                result["message"] = f"Booking error detected: {error_message}"
-                logger.error(f"Booking error detected: {error_message}")
-                return result
-
-            # Keep session alive
-            keep_session_alive(driver, refresh_interval, username)
-            time.sleep(check_interval)
-
-        driver.refresh()
-        logger.info("Page refreshed at booking time.")
+        # Wait for the exact booking time
+        while datetime.datetime.now() < target_time:
+            time.sleep(refresh_interval)  # Short sleep to avoid excessive CPU usage
 
         # Ensure the page is loaded with the correct target date
         if not verify_page_url(driver, target_date, username, amenity_id):
-            result["message"] = "Failed to load the correct target date page after multiple attempts."
+            result["message"] = "Failed to load the correct target date page after refresh."
             logger.error(result["message"])
+            return result
+
+        # Check for any validation errors
+        has_error, error_message = check_for_errors_and_exit(driver, username)
+        if has_error:
+            result["message"] = f"Booking error detected: {error_message}"
+            logger.error(f"Booking error detected: {error_message}")
             return result
 
         # Booking process
