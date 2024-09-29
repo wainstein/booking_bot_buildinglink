@@ -290,11 +290,12 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
     target_time = datetime.datetime.combine(target_datetime - datetime.timedelta(days=prio_days), datetime.time(0, 0))
     logger.info(f"Waiting for booking time: {target_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
+    # Wait until 5 minutes before target time
     while True:
         now = datetime.datetime.now()
-        time_to_booking = (target_time - now).total_seconds() / 60  # Time to booking in minutes
+        time_to_booking = (target_time - now).total_seconds()
 
-        if time_to_booking <= 5:
+        if time_to_booking <= 300:
             logger.info("Booking time is less than 5 minutes away. Getting ready...")
             break  # Within 5 minutes or already past target time
 
@@ -309,37 +310,37 @@ def run_booking_process(username, password, target_date, start_time, prio_days, 
         login(driver, username, password, login_date)
         logger.info("Logged in.")
 
+        # Wait until target time
+        while True:
+            now = datetime.datetime.now()
+            time_to_booking = (target_time - now).total_seconds()
+            if time_to_booking <= 0:
+                break
+            elif time_to_booking <= 5:  # If less than 5 seconds, wait precisely
+                time.sleep(time_to_booking)
+                break
+            else:
+                time.sleep(check_interval)  # Wait in small intervals
 
-        # Calculate time to wait before the final refresh
-        now = datetime.datetime.now()
-        time_to_booking = (target_time - now).total_seconds()
-        time_to_wait = max(check_interval, time_to_booking - refresh_interval)
-        logger.info(f"Refresh before {time_to_wait:.2f} seconds ahead of final booking time.")
-        # Perform final refresh just before booking time
-        driver.refresh()
-        time.sleep(time_to_wait) # Short sleep to avoid server time difference
-        
-        # Navigate to booking page
-        navigate_to_booking_page(driver, amenity_id, target_date, username)
-        logger.info(f"Navigated to reserve page for amenity {amenity_name}.")
-        
-        time.sleep(time_to_wait)
+        # Start trying to navigate to the booking page
+        max_attempts = 10
+        attempts = 0
+        while attempts < max_attempts:
+            navigate_to_booking_page(driver, amenity_id, target_date, username)
+            logger.info(f"Attempt {attempts+1}: Navigated to reserve page for amenity {amenity_name}.")
 
-        # Wait for the exact booking time
-        while datetime.datetime.now() < target_time:
-            time.sleep(refresh_interval)  # Short sleep to avoid excessive CPU usage
+            # Verify if the page is for the correct date
+            if verify_page_url(driver, target_date, username, amenity_id):
+                logger.info("Correct date page loaded.")
+                break
+            else:
+                logger.info("Incorrect date page loaded. Retrying...")
+                time.sleep(check_interval)
+                attempts += 1
 
-        # Ensure the page is loaded with the correct target date
-        if not verify_page_url(driver, target_date, username, amenity_id):
-            result["message"] = "Failed to load the correct target date page after refresh."
+        if attempts >= max_attempts:
+            result["message"] = "Failed to load the correct target date page after multiple attempts."
             logger.error(result["message"])
-            return result
-
-        # Check for any validation errors
-        has_error, error_message = check_for_errors_and_exit(driver, username)
-        if has_error:
-            result["message"] = f"Booking error detected: {error_message}"
-            logger.error(f"Booking error detected: {error_message}")
             return result
 
         # Booking process
