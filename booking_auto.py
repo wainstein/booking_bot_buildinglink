@@ -34,7 +34,7 @@ def run_all_bookings(config):
     target_date_offset_days = config["target_date_offset_days"]
     primary_amenity_name = config["primary_amenity_name"]
     alternate_amenity_name = config["alternate_amenity_name"]
-    times = config["times"]
+    times = config["times"]  # List of time_slots
     refresh_interval = config["refresh_interval_seconds"]
     check_interval = config["check_interval_seconds"]
     target_days = config["target_days"]
@@ -61,16 +61,43 @@ def run_all_bookings(config):
     print("\nStarting first round booking for primary amenity.")
     threads = []
     first_round_results = []
+    lock = threading.Lock()  # To synchronize access to first_round_results
 
-    for user in user_list:
+    # Determine rotation offset for time_slots to ensure different starting slots per thread
+    total_time_slots = len(times)
+
+    for i, user in enumerate(user_list):
         username = user['username']
         password = user['password']
-        for start_time in times:
-            t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-                                 args=(first_round_results, username, password, target_date_str, start_time, prio_days, primary_amenity_id, primary_amenity_name, refresh_interval, check_interval))
-            threads.append(t)
-            t.start()
-            time.sleep(0.1)  # Wait 100ms between each booking thread to avoid clashes
+
+        # Rotate time_slots list for each thread to ensure different starting slots
+        rotation_offset = i % total_time_slots if total_time_slots > 0 else 0
+        rotated_times = times[rotation_offset:] + times[:rotation_offset]
+
+        # Define the thread's target function with rotated time_slots
+        def thread_target(user, rotated_times, first_round_results, lock):
+            username = user['username']
+            password = user['password']
+            results = run_booking_process(
+                username=username,
+                password=password,
+                target_date=target_date_str,
+                time_slots=rotated_times,
+                prio_days=prio_days,
+                amenity_id=primary_amenity_id,
+                amenity_name=primary_amenity_name,
+                refresh_interval=refresh_interval,
+                check_interval=check_interval,
+                config=config
+            )
+            with lock:
+                first_round_results.extend(results)
+
+        # Create and start the thread
+        t = threading.Thread(target=thread_target, args=(user, rotated_times, first_round_results, lock))
+        threads.append(t)
+        t.start()
+        time.sleep(0.15)  # Optional: small delay to stagger thread starts
 
     # Wait for all threads to complete
     for t in threads:
@@ -85,39 +112,6 @@ def run_all_bookings(config):
                 'username': result['username'],
                 'amenity_name': primary_amenity_name
             }
-
-    # # Determine which time slots failed
-    # failed_time_slots = [time_slot for time_slot, res in summary_results.items() if res == {}]
-
-    # # Second Round Booking: Attempt to book alternate amenity for failed time slots
-    # if failed_time_slots:
-    #     print("\nStarting second round booking for alternate amenity.")
-    #     threads = []
-    #     second_round_results = []
-
-    #     for time_slot in failed_time_slots:
-    #         for user in user_list:
-    #             username = user['username']
-    #             password = user['password']
-    #             t = threading.Thread(target=lambda q, *args: q.append(run_booking_process(*args)),
-    #                                  args=(second_round_results, username, password, target_date_str, time_slot, prio_days, alternate_amenity_id, alternate_amenity_name, refresh_interval, check_interval))
-    #             threads.append(t)
-    #             t.start()
-    #             time.sleep(0.1)
-
-    #     # Wait for all threads to complete
-    #     for t in threads:
-    #         t.join()
-
-    #     # Process second round results
-    #     for result in second_round_results:
-    #         time_slot = result['time']
-    #         if result['status'] == 'Success' and time_slot in summary_results and summary_results[time_slot] == {}:
-    #             summary_results[time_slot] = {
-    #                 'status': 'Success',
-    #                 'username': result['username'],
-    #                 'amenity_name': alternate_amenity_name
-    #             }
 
     # Update summary results for failed time slots
     for time_slot, res in summary_results.items():
